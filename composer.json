@@ -1,0 +1,40 @@
+{
+    "name": "eservice/partner-sdk",
+    "description": "eService partner PHP SDK — instruct dossiers via référence (sendMessage, sendDocument, requestDocuments, validAppointment).",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": ["eservice", "partner", "webhook", "dossier", "guinee", "composer"],
+    "homepage": "https://github.com/Donzo24/eservice-partner-sdk",
+    "support": {
+        "source": "https://github.com/Donzo24/eservice-partner-sdk",
+        "issues": "https://github.com/Donzo24/eservice-partner-sdk/issues"
+    },
+    "authors": [
+        {
+            "name": "eService",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "EService\\Partner\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EService\\Partner\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "minimum-stability": "stable"
+}
