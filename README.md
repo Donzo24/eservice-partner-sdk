@@ -43,10 +43,10 @@ Legacy helpers (`review()`, `approval()`, `signature()`, `documentGeneration()`,
 
 ## Installation
 
-Via [Packagist](https://packagist.org/packages/eservice/partner-sdk) :
+Via [Packagist](https://packagist.org/packages/donzo24/eservice-partner-sdk) :
 
 ```bash
-composer require eservice/partner-sdk
+composer require donzo24/eservice-partner-sdk
 ```
 
 Ou en développement local (path repository) :
@@ -54,7 +54,7 @@ Ou en développement local (path repository) :
 ```json
 {
   "repositories": [{ "type": "path", "url": "../eservice/sdks/php" }],
-  "require": { "eservice/partner-sdk": "*" }
+  "require": { "donzo24/eservice-partner-sdk": "*" }
 }
 ```
 
