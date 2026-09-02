@@ -1,5 +1,5 @@
 {
-    "name": "donzo24/eservice-partner-sdk",
+    "name": "guinee/eservice",
     "description": "eService partner PHP SDK — instruct dossiers via référence (sendMessage, sendDocument, requestDocuments, validAppointment).",
     "type": "library",
     "license": "proprietary",
