@@ -55,6 +55,9 @@ final class SimplifiedSdkMethodsTest extends TestCase
                         'raw' => '{}',
                     ];
                 }
+                if (str_contains($url, '/partner/runs/by-reference/message/')) {
+                    return ['statusCode' => 201, 'body' => ['ok' => true], 'raw' => '{}'];
+                }
                 if (str_contains($url, '/partner/runs/by-reference/') && !str_contains($url, '/callback')) {
                     return [
                         'statusCode' => 200,
@@ -75,12 +78,11 @@ final class SimplifiedSdkMethodsTest extends TestCase
         $out = $client->sendMessage(self::REFERENCE, 'Bonjour');
 
         $this->assertTrue($out['ok']);
-        $this->assertCount(2, $http->calls);
-        $this->assertSame('GET', $http->calls[0][0]);
-        $this->assertStringContainsString('reference=DEM-2026-00042', $http->calls[0][1]);
-        $this->assertSame('POST', $http->calls[1][0]);
-        $this->assertStringContainsString('/partner/runs/' . self::RUN_ID . '/message/', $http->calls[1][1]);
-        $this->assertSame('Bonjour', $http->calls[1][2]['body']);
+        $this->assertCount(1, $http->calls);
+        $this->assertSame('POST', $http->calls[0][0]);
+        $this->assertStringContainsString('/partner/runs/by-reference/message/', $http->calls[0][1]);
+        $this->assertSame(self::REFERENCE, $http->calls[0][2]['reference']);
+        $this->assertSame('Bonjour', $http->calls[0][2]['body']);
     }
 
     public function testSendDocumentUsesReference(): void
