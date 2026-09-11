@@ -60,15 +60,23 @@ final class Client
         string $message,
         ?array $attachments = null,
     ): array {
-        $runId = $this->resolveRunIdFromReference($reference);
-        $payload = ['body' => $message];
+        $ref = trim($reference);
+        if ($ref === '') {
+            throw new EServiceException('La référence de la demande est requise.');
+        }
+
+        // Un seul appel APIM-friendly (évite GET by-reference + POST /runs/{uuid}/…).
+        $payload = [
+            'reference' => $ref,
+            'body' => $message,
+        ];
         if ($attachments !== null) {
             $payload['attachments'] = $attachments;
         }
 
         return $this->partnerRequest(
             'POST',
-            '/partner/runs/' . rawurlencode($runId) . '/message/',
+            '/partner/runs/by-reference/message/',
             $payload,
         );
     }
