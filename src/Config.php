@@ -7,9 +7,13 @@ namespace EService\Partner;
 /**
  * Configuration du SDK partenaire eService.
  *
- * Authentification webhook uniquement :
- * - ``callbackToken`` du dossier (header X-Webhook-Token), et/ou
- * - ``partnerId`` + ``partnerSecret`` configurés sur l'étape de transfert.
+ * Authentification des appels sortants vers e-Service / APIM :
+ * 1. (recommandé prod) OAuth2 client_credentials (Keycloak / IAM APIM)
+ *    → header ``Authorization: Bearer <access_token>``
+ * 2. Identifiants partenaire → ``X-Partner-Id`` / ``X-Partner-Secret``
+ * 3. (legacy webhook) ``callbackToken`` → header configurable (défaut X-Webhook-Token)
+ *
+ * Toutes les valeurs doivent venir du ``.env`` du partenaire.
  */
 final class Config
 {
@@ -20,6 +24,13 @@ final class Config
         public readonly string $webhookTokenHeader = 'X-Webhook-Token',
         public readonly int $timeoutSeconds = 30,
         public readonly bool $verifySsl = true,
+        /** URL token OpenID Connect, ex. …/realms/kong/protocol/openid-connect/token */
+        public readonly ?string $oauthTokenUrl = null,
+        public readonly ?string $oauthClientId = null,
+        public readonly ?string $oauthClientSecret = null,
+        public readonly string $oauthGrantType = 'client_credentials',
+        /** Marge (secondes) avant ``expires_in`` pour rafraîchir le token. */
+        public readonly int $oauthSkewSeconds = 60,
     ) {
     }
 
@@ -30,7 +41,12 @@ final class Config
      *   partnerSecret?: string|null,
      *   webhookTokenHeader?: string,
      *   timeoutSeconds?: int,
-     *   verifySsl?: bool
+     *   verifySsl?: bool,
+     *   oauthTokenUrl?: string|null,
+     *   oauthClientId?: string|null,
+     *   oauthClientSecret?: string|null,
+     *   oauthGrantType?: string,
+     *   oauthSkewSeconds?: int
      * } $options
      */
     public static function fromArray(array $options): self
@@ -42,7 +58,28 @@ final class Config
             webhookTokenHeader: (string) ($options['webhookTokenHeader'] ?? 'X-Webhook-Token'),
             timeoutSeconds: (int) ($options['timeoutSeconds'] ?? 30),
             verifySsl: (bool) ($options['verifySsl'] ?? true),
+            oauthTokenUrl: isset($options['oauthTokenUrl']) && (string) $options['oauthTokenUrl'] !== ''
+                ? (string) $options['oauthTokenUrl']
+                : null,
+            oauthClientId: isset($options['oauthClientId']) && (string) $options['oauthClientId'] !== ''
+                ? (string) $options['oauthClientId']
+                : null,
+            oauthClientSecret: isset($options['oauthClientSecret']) && (string) $options['oauthClientSecret'] !== ''
+                ? (string) $options['oauthClientSecret']
+                : null,
+            oauthGrantType: (string) ($options['oauthGrantType'] ?? 'client_credentials'),
+            oauthSkewSeconds: max(0, (int) ($options['oauthSkewSeconds'] ?? 60)),
         );
+    }
+
+    public function hasOAuthConfig(): bool
+    {
+        return $this->oauthTokenUrl !== null
+            && $this->oauthTokenUrl !== ''
+            && $this->oauthClientId !== null
+            && $this->oauthClientId !== ''
+            && $this->oauthClientSecret !== null
+            && $this->oauthClientSecret !== '';
     }
 
     public function withBaseUrl(string $baseUrl): self
@@ -54,6 +91,11 @@ final class Config
             webhookTokenHeader: $this->webhookTokenHeader,
             timeoutSeconds: $this->timeoutSeconds,
             verifySsl: $this->verifySsl,
+            oauthTokenUrl: $this->oauthTokenUrl,
+            oauthClientId: $this->oauthClientId,
+            oauthClientSecret: $this->oauthClientSecret,
+            oauthGrantType: $this->oauthGrantType,
+            oauthSkewSeconds: $this->oauthSkewSeconds,
         );
     }
 }

@@ -12,9 +12,10 @@ final class CurlHttpClient implements HttpClientInterface
         string $method,
         string $url,
         array $headers = [],
-        ?array $jsonBody = null,
+        ?array $body = null,
         int $timeoutSeconds = 30,
         bool $verifySsl = true,
+        string $bodyFormat = 'json',
     ): array {
         if (!extension_loaded('curl')) {
             throw new EServiceException('L\'extension PHP curl est requise.');
@@ -40,16 +41,26 @@ final class CurlHttpClient implements HttpClientInterface
             CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
         ];
 
-        if ($jsonBody !== null) {
-            $encoded = json_encode($jsonBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if ($encoded === false) {
-                curl_close($ch);
-                throw new EServiceException('Impossible d\'encoder le corps JSON.');
-            }
-            $opts[CURLOPT_POSTFIELDS] = $encoded;
-            if (!isset($headers['Content-Type']) && !isset($headers['content-type'])) {
-                $headerLines[] = 'Content-Type: application/json';
-                $opts[CURLOPT_HTTPHEADER] = $headerLines;
+        if ($body !== null) {
+            $format = strtolower(trim($bodyFormat)) === 'form' ? 'form' : 'json';
+            if ($format === 'form') {
+                $encoded = http_build_query($body);
+                $opts[CURLOPT_POSTFIELDS] = $encoded;
+                if (!$this->hasHeader($headers, 'Content-Type')) {
+                    $headerLines[] = 'Content-Type: application/x-www-form-urlencoded';
+                    $opts[CURLOPT_HTTPHEADER] = $headerLines;
+                }
+            } else {
+                $encoded = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if ($encoded === false) {
+                    curl_close($ch);
+                    throw new EServiceException('Impossible d\'encoder le corps JSON.');
+                }
+                $opts[CURLOPT_POSTFIELDS] = $encoded;
+                if (!$this->hasHeader($headers, 'Content-Type')) {
+                    $headerLines[] = 'Content-Type: application/json';
+                    $opts[CURLOPT_HTTPHEADER] = $headerLines;
+                }
             }
         }
 
@@ -77,5 +88,19 @@ final class CurlHttpClient implements HttpClientInterface
             'body' => $decoded,
             'raw' => $raw,
         ];
+    }
+
+    /**
+     * @param array<string, string> $headers
+     */
+    private function hasHeader(array $headers, string $name): bool
+    {
+        foreach ($headers as $key => $_value) {
+            if (strcasecmp((string) $key, $name) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

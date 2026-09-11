@@ -81,6 +81,7 @@ final class InstructionStepsTest extends TestCase
                 ?array $jsonBody = null,
                 int $timeoutSeconds = 30,
                 bool $verifySsl = true,
+                string $bodyFormat = 'json',
             ): array {
                 $this->last = $jsonBody;
 

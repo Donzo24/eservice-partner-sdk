@@ -7,6 +7,7 @@ namespace EService\Partner\Tests;
 use EService\Partner\Client;
 use EService\Partner\Config;
 use EService\Partner\Http\HttpClientInterface;
+use EService\Partner\Webhook\CallbackRequest;
 use EService\Partner\Webhook\ResultData;
 use PHPUnit\Framework\TestCase;
 
@@ -15,13 +16,13 @@ final class SimplifiedSdkMethodsTest extends TestCase
     private const REFERENCE = 'DEM-2026-00042';
     private const RUN_ID = '550e8400-e29b-41d4-a716-446655440000';
 
-    private function clientWithCapture(object $http): Client
+    private function clientWithCapture(object $http, array $configExtra = []): Client
     {
-        return new Client(Config::fromArray([
+        return new Client(Config::fromArray(array_merge([
             'baseUrl' => 'https://api.example/api/v1',
             'partnerId' => 'prt_test',
             'partnerSecret' => 'secret',
-        ]), $http);
+        ], $configExtra)), $http);
     }
 
     /**
@@ -30,7 +31,7 @@ final class SimplifiedSdkMethodsTest extends TestCase
     private function httpStub(): object
     {
         return new class(self::RUN_ID) implements HttpClientInterface {
-            /** @var list<array{0:string,1:string,2:array}> */
+            /** @var list<array{0:string,1:string,2:array,3:array<string,string>,4:string}> */
             public array $calls = [];
 
             public function __construct(private readonly string $runId)
@@ -41,12 +42,20 @@ final class SimplifiedSdkMethodsTest extends TestCase
                 string $method,
                 string $url,
                 array $headers = [],
-                ?array $jsonBody = null,
+                ?array $body = null,
                 int $timeoutSeconds = 30,
                 bool $verifySsl = true,
+                string $bodyFormat = 'json',
             ): array {
-                $this->calls[] = [$method, $url, $jsonBody ?? []];
-                if (str_contains($url, '/partner/runs/by-reference/')) {
+                $this->calls[] = [$method, $url, $body ?? [], $headers, $bodyFormat];
+                if (str_contains($url, '/openid-connect/token')) {
+                    return [
+                        'statusCode' => 200,
+                        'body' => ['access_token' => 'tok_test', 'expires_in' => 300],
+                        'raw' => '{}',
+                    ];
+                }
+                if (str_contains($url, '/partner/runs/by-reference/') && !str_contains($url, '/callback')) {
                     return [
                         'statusCode' => 200,
                         'body' => ['id' => $this->runId, 'reference' => 'DEM-2026-00042'],
@@ -103,5 +112,30 @@ final class SimplifiedSdkMethodsTest extends TestCase
         $this->assertStringContainsString('/validate-appointment/', $http->calls[3][1]);
         $this->assertSame('rdv', $http->calls[3][2]['step_code']);
         $this->assertSame('approve', $http->calls[3][2]['action']);
+    }
+
+    public function testPartnerCallsFetchOauthTokenThenSendBearer(): void
+    {
+        $http = $this->httpStub();
+        $client = $this->clientWithCapture($http, [
+            'oauthTokenUrl' => 'https://iam.example/realms/kong/protocol/openid-connect/token',
+            'oauthClientId' => 'ande',
+            'oauthClientSecret' => 'secret-oauth',
+        ]);
+
+        $client->callback(self::REFERENCE, CallbackRequest::completed(['x' => 1]));
+
+        $this->assertGreaterThanOrEqual(2, count($http->calls));
+        $this->assertSame('POST', $http->calls[0][0]);
+        $this->assertStringContainsString('/openid-connect/token', $http->calls[0][1]);
+        $this->assertSame('form', $http->calls[0][4]);
+        $this->assertSame('client_credentials', $http->calls[0][2]['grant_type']);
+        $this->assertSame('ande', $http->calls[0][2]['client_id']);
+
+        $callbackCall = $http->calls[1];
+        $this->assertStringContainsString('/partner/runs/by-reference/callback/', $callbackCall[1]);
+        $this->assertSame('Bearer tok_test', $callbackCall[3]['Authorization'] ?? null);
+        $this->assertSame('prt_test', $callbackCall[3]['X-Partner-Id'] ?? null);
+        $this->assertSame('secret', $callbackCall[3]['X-Partner-Secret'] ?? null);
     }
 }
