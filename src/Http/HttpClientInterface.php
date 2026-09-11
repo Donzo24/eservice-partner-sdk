@@ -11,15 +11,17 @@ interface HttpClientInterface
 {
     /**
      * @param array<string, string> $headers
-     * @param array<string, mixed>|null $jsonBody
+     * @param array<string, mixed>|null $body  Corps JSON (défaut) ou champs form-urlencoded
+     * @param 'json'|'form' $bodyFormat
      * @return array{statusCode: int, body: array<string, mixed>|list<mixed>|null, raw: string}
      */
     public function request(
         string $method,
         string $url,
         array $headers = [],
-        ?array $jsonBody = null,
+        ?array $body = null,
         int $timeoutSeconds = 30,
         bool $verifySsl = true,
+        string $bodyFormat = 'json',
     ): array;
 }

@@ -73,6 +73,7 @@ final class IncomingDossierTest extends TestCase
                 ?array $jsonBody = null,
                 int $timeoutSeconds = 30,
                 bool $verifySsl = true,
+                string $bodyFormat = 'json',
             ): array {
                 $this->last = compact('method', 'url', 'headers', 'jsonBody');
 
@@ -119,8 +120,7 @@ final class IncomingDossierTest extends TestCase
         $this->expectException(AuthenticationException::class);
         $client = new Client(new Config(baseUrl: 'https://eservices.test/api/v1'));
         $client->callback(
-            '550e8400-e29b-41d4-a716-446655440000',
-            'step',
+            'DEM-2026-00042',
             CallbackRequest::completed(),
         );
     }

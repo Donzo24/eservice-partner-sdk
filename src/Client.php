@@ -34,6 +34,8 @@ final class Client
 {
     private Config $config;
     private HttpClientInterface $http;
+    private ?string $cachedAccessToken = null;
+    private int $cachedAccessTokenExpiresAt = 0;
 
     public function __construct(?Config $config = null, ?HttpClientInterface $http = null)
     {
@@ -393,6 +395,78 @@ final class Client
     }
 
     /**
+     * Obtient un access_token Keycloak (client_credentials), avec cache mémoire.
+     *
+     * @throws AuthenticationException
+     * @throws ApiException
+     */
+    public function getAccessToken(bool $forceRefresh = false): string
+    {
+        if (!$this->config->hasOAuthConfig()) {
+            throw new AuthenticationException(
+                'OAuth non configuré : renseignez oauthTokenUrl, oauthClientId et oauthClientSecret (.env).'
+            );
+        }
+
+        $now = time();
+        if (
+            !$forceRefresh
+            && $this->cachedAccessToken !== null
+            && $this->cachedAccessToken !== ''
+            && $now < ($this->cachedAccessTokenExpiresAt - $this->config->oauthSkewSeconds)
+        ) {
+            return $this->cachedAccessToken;
+        }
+
+        $response = $this->http->request(
+            'POST',
+            (string) $this->config->oauthTokenUrl,
+            [
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/x-www-form-urlencoded',
+                'User-Agent' => 'eservice-partner-sdk-php/2.1',
+            ],
+            [
+                'grant_type' => $this->config->oauthGrantType !== ''
+                    ? $this->config->oauthGrantType
+                    : 'client_credentials',
+                'client_id' => (string) $this->config->oauthClientId,
+                'client_secret' => (string) $this->config->oauthClientSecret,
+            ],
+            $this->config->timeoutSeconds,
+            $this->config->verifySsl,
+            'form',
+        );
+
+        $code = $response['statusCode'];
+        $body = is_array($response['body']) ? $response['body'] : [];
+        if ($code < 200 || $code >= 300) {
+            throw new AuthenticationException(
+                is_string($body['error_description'] ?? null)
+                    ? (string) $body['error_description']
+                    : (is_string($body['error'] ?? null)
+                        ? (string) $body['error']
+                        : ('Échec obtention token OAuth (HTTP ' . $code . ').'))
+            );
+        }
+
+        $token = $body['access_token'] ?? null;
+        if (!is_string($token) || $token === '') {
+            throw new AuthenticationException('Réponse OAuth sans access_token.');
+        }
+
+        $expiresIn = isset($body['expires_in']) ? (int) $body['expires_in'] : 300;
+        if ($expiresIn < 30) {
+            $expiresIn = 30;
+        }
+
+        $this->cachedAccessToken = $token;
+        $this->cachedAccessTokenExpiresAt = $now + $expiresIn;
+
+        return $token;
+    }
+
+    /**
      * @return array<string, string>
      */
     private function buildPartnerAuthHeaders(): array
@@ -400,7 +474,7 @@ final class Client
         $headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
-            'User-Agent' => 'eservice-partner-sdk-php/2.0',
+            'User-Agent' => 'eservice-partner-sdk-php/2.1',
         ];
         if ($this->hasPartnerCredentials()) {
             $headers['X-Partner-Id'] = (string) $this->config->partnerId;
@@ -409,6 +483,10 @@ final class Client
             throw new AuthenticationException(
                 'Partner credentials (partnerId / partnerSecret) are required for /partner API.'
             );
+        }
+
+        if ($this->config->hasOAuthConfig()) {
+            $headers['Authorization'] = 'Bearer ' . $this->getAccessToken();
         }
 
         return $headers;
@@ -422,7 +500,7 @@ final class Client
         $headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
-            'User-Agent' => 'eservice-partner-sdk-php/2.0',
+            'User-Agent' => 'eservice-partner-sdk-php/2.1',
         ];
         $token = $callbackToken !== null && $callbackToken !== '' ? $callbackToken : null;
         if ($token !== null) {
@@ -432,7 +510,10 @@ final class Client
             $headers['X-Partner-Id'] = (string) $this->config->partnerId;
             $headers['X-Partner-Secret'] = (string) $this->config->partnerSecret;
         }
-        if ($token === null && !$this->hasPartnerCredentials()) {
+        if ($this->config->hasOAuthConfig()) {
+            $headers['Authorization'] = 'Bearer ' . $this->getAccessToken();
+        }
+        if ($token === null && !$this->hasPartnerCredentials() && !$this->config->hasOAuthConfig()) {
             throw new AuthenticationException('No callback token or partner credentials provided.');
         }
 
