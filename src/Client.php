@@ -223,7 +223,7 @@ final class Client
                 $this->buildWebhookAuthHeaders($callbackToken),
                 $request->toArray(),
                 $this->config->timeoutSeconds,
-                $this->config->verifySsl,
+                $this->config->sslVerifyOption(),
             );
 
             return $this->handleJsonResponse($response, asCallback: true);
@@ -360,7 +360,7 @@ final class Client
             $this->buildPartnerAuthHeaders(),
             $jsonBody,
             $this->config->timeoutSeconds,
-            $this->config->verifySsl,
+            $this->config->sslVerifyOption(),
         );
         $result = $this->handleJsonResponse($response, asCallback: false);
 
@@ -442,7 +442,7 @@ final class Client
                 'client_secret' => (string) $this->config->oauthClientSecret,
             ],
             $this->config->timeoutSeconds,
-            $this->config->verifySsl,
+            $this->config->sslVerifyOption(),
             'form',
         );
 

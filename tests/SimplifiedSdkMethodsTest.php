@@ -44,7 +44,7 @@ final class SimplifiedSdkMethodsTest extends TestCase
                 array $headers = [],
                 ?array $body = null,
                 int $timeoutSeconds = 30,
-                bool $verifySsl = true,
+                bool|string $verifySsl = true,
                 string $bodyFormat = 'json',
             ): array {
                 $this->calls[] = [$method, $url, $body ?? [], $headers, $bodyFormat];
@@ -139,5 +139,27 @@ final class SimplifiedSdkMethodsTest extends TestCase
         $this->assertSame('Bearer tok_test', $callbackCall[3]['Authorization'] ?? null);
         $this->assertSame('prt_test', $callbackCall[3]['X-Partner-Id'] ?? null);
         $this->assertSame('secret', $callbackCall[3]['X-Partner-Secret'] ?? null);
+    }
+
+    public function testSslVerifyOptionUsesCaBundlePath(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'ca');
+        self::assertNotFalse($tmp);
+        file_put_contents($tmp, "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n");
+
+        $config = Config::fromArray([
+            'baseUrl' => 'https://api.example/v2',
+            'verifySsl' => true,
+            'caBundle' => $tmp,
+        ]);
+        $this->assertSame($tmp, $config->sslVerifyOption());
+
+        $configOff = Config::fromArray([
+            'verifySsl' => false,
+            'caBundle' => $tmp,
+        ]);
+        $this->assertFalse($configOff->sslVerifyOption());
+
+        @unlink($tmp);
     }
 }

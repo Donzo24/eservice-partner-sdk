@@ -31,6 +31,11 @@ final class Config
         public readonly string $oauthGrantType = 'client_credentials',
         /** Marge (secondes) avant ``expires_in`` pour rafraîchir le token. */
         public readonly int $oauthSkewSeconds = 60,
+        /**
+         * Chemin vers un CA PEM (ex. root-ca.crt ServicePublic).
+         * Utilisé quand ``verifySsl`` est true — équivalent Guzzle ``verify => $path``.
+         */
+        public readonly ?string $caBundle = null,
     ) {
     }
 
@@ -46,11 +51,14 @@ final class Config
      *   oauthClientId?: string|null,
      *   oauthClientSecret?: string|null,
      *   oauthGrantType?: string,
-     *   oauthSkewSeconds?: int
+     *   oauthSkewSeconds?: int,
+     *   caBundle?: string|null
      * } $options
      */
     public static function fromArray(array $options): self
     {
+        $ca = isset($options['caBundle']) ? trim((string) $options['caBundle']) : '';
+
         return new self(
             baseUrl: rtrim((string) ($options['baseUrl'] ?? ''), '/'),
             partnerId: isset($options['partnerId']) ? (string) $options['partnerId'] : null,
@@ -69,6 +77,7 @@ final class Config
                 : null,
             oauthGrantType: (string) ($options['oauthGrantType'] ?? 'client_credentials'),
             oauthSkewSeconds: max(0, (int) ($options['oauthSkewSeconds'] ?? 60)),
+            caBundle: $ca !== '' ? $ca : null,
         );
     }
 
@@ -80,6 +89,26 @@ final class Config
             && $this->oauthClientId !== ''
             && $this->oauthClientSecret !== null
             && $this->oauthClientSecret !== '';
+    }
+
+    /**
+     * Option cURL / Guzzle ``verify`` : false | true | chemin CA.
+     */
+    public function sslVerifyOption(): bool|string
+    {
+        if (!$this->verifySsl) {
+            return false;
+        }
+
+        if (
+            $this->caBundle !== null
+            && $this->caBundle !== ''
+            && is_readable($this->caBundle)
+        ) {
+            return $this->caBundle;
+        }
+
+        return true;
     }
 
     public function withBaseUrl(string $baseUrl): self
@@ -96,6 +125,7 @@ final class Config
             oauthClientSecret: $this->oauthClientSecret,
             oauthGrantType: $this->oauthGrantType,
             oauthSkewSeconds: $this->oauthSkewSeconds,
+            caBundle: $this->caBundle,
         );
     }
 }

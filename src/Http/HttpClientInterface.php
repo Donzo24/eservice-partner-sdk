@@ -12,6 +12,7 @@ interface HttpClientInterface
     /**
      * @param array<string, string> $headers
      * @param array<string, mixed>|null $body  Corps JSON (défaut) ou champs form-urlencoded
+     * @param bool|string $verifySsl false = off ; true = CA système ; string = chemin PEM
      * @param 'json'|'form' $bodyFormat
      * @return array{statusCode: int, body: array<string, mixed>|list<mixed>|null, raw: string}
      */
@@ -21,7 +22,7 @@ interface HttpClientInterface
         array $headers = [],
         ?array $body = null,
         int $timeoutSeconds = 30,
-        bool $verifySsl = true,
+        bool|string $verifySsl = true,
         string $bodyFormat = 'json',
     ): array;
 }

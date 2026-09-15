@@ -24,6 +24,8 @@ ESERVICE_OAUTH_CLIENT_ID=your-client-id
 ESERVICE_OAUTH_CLIENT_SECRET=your-client-secret
 ESERVICE_OAUTH_GRANT_TYPE=client_credentials
 ESERVICE_VERIFY_SSL=true
+# CA auto-signé ServicePublic (chemin absolu dans le conteneur / hôte)
+ESERVICE_CA_BUNDLE=/usr/local/share/ca-certificates/root-ca.crt
 ```
 
 ```php
@@ -36,6 +38,7 @@ $client = new Client(Config::fromArray([
     'oauthClientSecret' => getenv('ESERVICE_OAUTH_CLIENT_SECRET'),
     'oauthGrantType' => getenv('ESERVICE_OAUTH_GRANT_TYPE') ?: 'client_credentials',
     'verifySsl' => filter_var(getenv('ESERVICE_VERIFY_SSL') ?: 'true', FILTER_VALIDATE_BOOL),
+    'caBundle' => getenv('ESERVICE_CA_BUNDLE') ?: null,
 ]));
 
 $client->callback('DEM-2026-00042', CallbackRequest::completed(['numero' => 'REG-1']));

@@ -14,7 +14,7 @@ final class CurlHttpClient implements HttpClientInterface
         array $headers = [],
         ?array $body = null,
         int $timeoutSeconds = 30,
-        bool $verifySsl = true,
+        bool|string $verifySsl = true,
         string $bodyFormat = 'json',
     ): array {
         if (!extension_loaded('curl')) {
@@ -31,15 +31,24 @@ final class CurlHttpClient implements HttpClientInterface
             $headerLines[] = $name . ': ' . $value;
         }
 
+        $verifyPeer = $verifySsl !== false;
         $opts = [
             CURLOPT_CUSTOMREQUEST => strtoupper($method),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_TIMEOUT => max(1, $timeoutSeconds),
             CURLOPT_HTTPHEADER => $headerLines,
-            CURLOPT_SSL_VERIFYPEER => $verifySsl,
-            CURLOPT_SSL_VERIFYHOST => $verifySsl ? 2 : 0,
+            CURLOPT_SSL_VERIFYPEER => $verifyPeer,
+            CURLOPT_SSL_VERIFYHOST => $verifyPeer ? 2 : 0,
         ];
+
+        if (is_string($verifySsl) && $verifySsl !== '') {
+            if (!is_readable($verifySsl)) {
+                curl_close($ch);
+                throw new EServiceException('Fichier CA SSL illisible : ' . $verifySsl);
+            }
+            $opts[CURLOPT_CAINFO] = $verifySsl;
+        }
 
         if ($body !== null) {
             $format = strtolower(trim($bodyFormat)) === 'form' ? 'form' : 'json';
