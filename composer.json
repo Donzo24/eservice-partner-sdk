@@ -1,6 +1,6 @@
 {
     "name": "guinee/eservice",
-    "description": "eService partner PHP SDK \u2014 instruct dossiers via r\u00e9f\u00e9rence (sendMessage, sendDocument, requestDocuments, validAppointment).",
+    "description": "eService partner PHP SDK \u2014 instruct dossiers via r\u00e9f\u00e9rence (sendMessage, sendDocument, requestDocuments, validAppointment, completeDemand).",
     "type": "library",
     "license": "proprietary",
     "keywords": [

@@ -56,23 +56,42 @@ Toutes les méthodes prennent la **référence de la demande** (pas l’objet do
 | `$client->sendDocument($reference, …)` | Document / résultat (étape « Résultat système externe ») |
 | `$client->requestDocuments($reference, …)` | Demande de pièces + **remise à la 1re étape** (citoyen peut modifier / resoumettre) |
 | `$client->validAppointment($reference, …)` | Valider ou refuser un rendez-vous |
+| `$client->completeDemand($reference, …)` | Marquer la demande comme terminée (`phase = done`) |
 
 ```php
 $reference = 'DEM-2026-00042';
 
 $client->sendMessage($reference, 'Votre dossier est en cours de traitement.');
+// Recommandé : le fichier est téléversé et conservé avec la demande (15 Mo max).
+$client->sendDocument(
+    $reference,
+    [
+        'file' => __DIR__ . '/decision.pdf',
+        'filename' => 'decision.pdf',
+        'title' => 'Décision',
+        'numero' => 'REG-2026-001',
+    ],
+    'Voici votre document.',
+);
+// Toujours compatible : document déjà hébergé par le partenaire.
 $client->sendDocument(
     $reference,
     ResultData::make()->numero('REG-2026-001')->documentUrl('https://…/doc.pdf'),
 );
 $client->requestDocuments($reference, ['CNI', 'Justificatif de domicile'], 'Merci de compléter.');
 $client->validAppointment($reference, 'rdv', 'approve');
+$client->completeDemand($reference, 'Votre demande est terminée.');
 
 // Callback webhook (demande entière — plus lié à une étape)
 $client->callback($reference, CallbackRequest::completed(['numero' => 'REG-1']));
 ```
 
-Le SDK résout la référence via `GET /partner/runs/by-reference/?reference=…` puis appelle l’endpoint d’action.
+`sendDocument` accepte un chemin local, un `SplFileInfo`, ou un tableau contenant
+`file`/`path` et des métadonnées. Les formats acceptés sont PDF, JPEG, PNG et WebP
+(15 Mo maximum). Le serveur stocke le fichier et conserve sa clé dans la demande.
+Les URL et contenus base64 restent acceptés pour la rétrocompatibilité.
+
+Les actions directes disponibles par référence évitent une requête de résolution préalable.
 Le callback utilise `POST /partner/runs/by-reference/callback/`.
 
 Legacy helpers (`review()`, `approval()`, `signature()`, `documentGeneration()`, webhook `callback`) remain available.

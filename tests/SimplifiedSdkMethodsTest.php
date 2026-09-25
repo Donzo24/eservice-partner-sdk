@@ -6,6 +6,7 @@ namespace EService\Partner\Tests;
 
 use EService\Partner\Client;
 use EService\Partner\Config;
+use EService\Partner\Exception\EServiceException;
 use EService\Partner\Http\HttpClientInterface;
 use EService\Partner\Webhook\CallbackRequest;
 use EService\Partner\Webhook\ResultData;
@@ -58,6 +59,16 @@ final class SimplifiedSdkMethodsTest extends TestCase
                 if (str_contains($url, '/partner/runs/by-reference/message/')) {
                     return ['statusCode' => 201, 'body' => ['ok' => true], 'raw' => '{}'];
                 }
+                if (str_contains($url, '/partner/runs/by-reference/document/')) {
+                    return ['statusCode' => 201, 'body' => ['ok' => true], 'raw' => '{}'];
+                }
+                if (str_contains($url, '/partner/runs/by-reference/complete/')) {
+                    return [
+                        'statusCode' => 200,
+                        'body' => ['ok' => true, 'action' => 'completeDemand', 'phase' => 'done'],
+                        'raw' => '{}',
+                    ];
+                }
                 if (str_contains($url, '/partner/runs/by-reference/') && !str_contains($url, '/callback')) {
                     return [
                         'statusCode' => 200,
@@ -95,9 +106,55 @@ final class SimplifiedSdkMethodsTest extends TestCase
             'Voici le document',
         );
 
-        $this->assertStringContainsString('/document/', $http->calls[1][1]);
-        $this->assertSame('REG-1', $http->calls[1][2]['data']['numero']);
-        $this->assertSame('Voici le document', $http->calls[1][2]['message']);
+        $this->assertCount(1, $http->calls);
+        $this->assertStringContainsString('/by-reference/document/', $http->calls[0][1]);
+        $this->assertSame(self::REFERENCE, $http->calls[0][2]['reference']);
+        $this->assertSame('REG-1', $http->calls[0][2]['data']['numero']);
+        $this->assertSame('Voici le document', $http->calls[0][2]['message']);
+    }
+
+    public function testSendDocumentUploadsAndKeepsFileMetadata(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'eservice-doc-');
+        self::assertNotFalse($path);
+        file_put_contents($path, '%PDF-1.4 test');
+
+        $http = $this->httpStub();
+        $client = $this->clientWithCapture($http);
+        $out = $client->sendDocument(
+            self::REFERENCE,
+            [
+                'file' => $path,
+                'filename' => 'decision.pdf',
+                'numero' => 'REG-2',
+                'title' => 'Décision',
+            ],
+            'Document définitif',
+        );
+
+        $this->assertTrue($out['ok']);
+        $this->assertCount(1, $http->calls);
+        $call = $http->calls[0];
+        $this->assertStringContainsString('/by-reference/document/', $call[1]);
+        $this->assertSame('multipart', $call[4]);
+        $this->assertSame(self::REFERENCE, $call[2]['reference']);
+        $this->assertInstanceOf(\CURLFile::class, $call[2]['file']);
+        $this->assertSame('decision.pdf', $call[2]['file']->getPostFilename());
+        $this->assertSame(
+            ['numero' => 'REG-2', 'title' => 'Décision'],
+            json_decode($call[2]['data'], true),
+        );
+        $this->assertArrayNotHasKey('Content-Type', $call[3]);
+
+        @unlink($path);
+    }
+
+    public function testSendDocumentRejectsMissingLocalFile(): void
+    {
+        $client = $this->clientWithCapture($this->httpStub());
+
+        $this->expectException(EServiceException::class);
+        $client->sendDocument(self::REFERENCE, '/tmp/eservice-document-inexistant.pdf');
     }
 
     public function testRequestDocumentsAndValidAppointmentUseReference(): void
@@ -139,6 +196,22 @@ final class SimplifiedSdkMethodsTest extends TestCase
         $this->assertSame('Bearer tok_test', $callbackCall[3]['Authorization'] ?? null);
         $this->assertSame('prt_test', $callbackCall[3]['X-Partner-Id'] ?? null);
         $this->assertSame('secret', $callbackCall[3]['X-Partner-Secret'] ?? null);
+    }
+
+    public function testCompleteDemandUsesReference(): void
+    {
+        $http = $this->httpStub();
+        $client = $this->clientWithCapture($http);
+        $out = $client->completeDemand(self::REFERENCE, 'Dossier clôturé');
+
+        $this->assertTrue($out['ok']);
+        $this->assertSame('completeDemand', $out['action']);
+        $this->assertSame('done', $out['phase']);
+        $this->assertCount(1, $http->calls);
+        $this->assertSame('POST', $http->calls[0][0]);
+        $this->assertStringContainsString('/partner/runs/by-reference/complete/', $http->calls[0][1]);
+        $this->assertSame(self::REFERENCE, $http->calls[0][2]['reference']);
+        $this->assertSame('Dossier clôturé', $http->calls[0][2]['message']);
     }
 
     public function testSslVerifyOptionUsesCaBundlePath(): void

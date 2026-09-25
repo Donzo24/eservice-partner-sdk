@@ -11,9 +11,9 @@ interface HttpClientInterface
 {
     /**
      * @param array<string, string> $headers
-     * @param array<string, mixed>|null $body  Corps JSON (défaut) ou champs form-urlencoded
+     * @param array<string, mixed>|null $body Corps JSON, formulaire ou multipart
      * @param bool|string $verifySsl false = off ; true = CA système ; string = chemin PEM
-     * @param 'json'|'form' $bodyFormat
+     * @param 'json'|'form'|'multipart' $bodyFormat
      * @return array{statusCode: int, body: array<string, mixed>|list<mixed>|null, raw: string}
      */
     public function request(

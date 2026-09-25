@@ -51,8 +51,14 @@ final class CurlHttpClient implements HttpClientInterface
         }
 
         if ($body !== null) {
-            $format = strtolower(trim($bodyFormat)) === 'form' ? 'form' : 'json';
-            if ($format === 'form') {
+            $requestedFormat = strtolower(trim($bodyFormat));
+            $format = in_array($requestedFormat, ['form', 'multipart'], true)
+                ? $requestedFormat
+                : 'json';
+            if ($format === 'multipart') {
+                // Passing the array lets cURL generate the multipart boundary and stream CURLFile values.
+                $opts[CURLOPT_POSTFIELDS] = $body;
+            } elseif ($format === 'form') {
                 $encoded = http_build_query($body);
                 $opts[CURLOPT_POSTFIELDS] = $encoded;
                 if (!$this->hasHeader($headers, 'Content-Type')) {

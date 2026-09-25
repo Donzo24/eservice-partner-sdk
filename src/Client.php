@@ -21,11 +21,12 @@ use EService\Partner\Webhook\ResultData;
 /**
  * Partner SDK — external agent layer over eService.
  *
- * Primary API (4 methods):
+ * Primary API:
  * 1. sendMessage()
  * 2. sendDocument()
  * 3. requestDocuments()
  * 4. validAppointment()
+ * 5. completeDemand()
  *
  * Legacy helpers (review / approval / signature / documentGeneration / callback)
  * remain available for older integrations.
@@ -89,19 +90,44 @@ final class Client
      */
     public function sendDocument(
         string $reference,
-        ResultData|array $document,
+        ResultData|array|string|\SplFileInfo $document,
         string $message = '',
     ): array {
-        $runId = $this->resolveRunIdFromReference($reference);
+        $ref = trim($reference);
+        if ($ref === '') {
+            throw new EServiceException('La référence de la demande est requise.');
+        }
+
+        $localFile = null;
+        $metadata = [];
+        if (is_string($document) || $document instanceof \SplFileInfo) {
+            $localFile = $document;
+        } elseif (is_array($document) && isset($document['file'])) {
+            $localFile = $document['file'];
+            $metadata = $document;
+            unset($metadata['file']);
+        } elseif (is_array($document) && isset($document['path'])) {
+            $localFile = $document['path'];
+            $metadata = $document;
+            unset($metadata['path']);
+        }
+
+        if ($localFile !== null) {
+            if (!is_string($localFile) && !$localFile instanceof \SplFileInfo) {
+                throw new EServiceException('Le champ file doit être un chemin local ou un SplFileInfo.');
+            }
+            return $this->uploadDocument($ref, $localFile, $metadata, $message);
+        }
+
         $data = $document instanceof ResultData ? $document->toArray() : $document;
-        $payload = ['data' => $data];
+        $payload = ['reference' => $ref, 'data' => $data];
         if ($message !== '') {
             $payload['message'] = $message;
         }
 
         return $this->partnerRequest(
             'POST',
-            '/partner/runs/' . rawurlencode($runId) . '/document/',
+            '/partner/runs/by-reference/document/',
             $payload,
         );
     }
@@ -160,7 +186,35 @@ final class Client
         );
     }
 
-    /** @deprecated Prefer sendMessage / sendDocument / requestDocuments / validAppointment */
+    /**
+     * Mark the demand as completed (state_data.phase = done).
+     *
+     * Idempotent if already completed. Optional citizen message uses the same
+     * channel as sendMessage.
+     *
+     * @param string $reference Référence de la demande (ex. DEM-2026-00042)
+     * @return array<string, mixed>
+     */
+    public function completeDemand(string $reference, string $message = ''): array
+    {
+        $ref = trim($reference);
+        if ($ref === '') {
+            throw new EServiceException('La référence de la demande est requise.');
+        }
+
+        $payload = ['reference' => $ref];
+        if ($message !== '') {
+            $payload['message'] = $message;
+        }
+
+        return $this->partnerRequest(
+            'POST',
+            '/partner/runs/by-reference/complete/',
+            $payload,
+        );
+    }
+
+    /** @deprecated Prefer sendMessage / sendDocument / requestDocuments / validAppointment / completeDemand */
     public function review(): Review
     {
         return new Review($this);
@@ -351,20 +405,88 @@ final class Client
      * @param array<string, mixed>|null $jsonBody
      * @return array<string, mixed>
      */
-    public function partnerRequest(string $method, string $path, ?array $jsonBody = null): array
+    public function partnerRequest(
+        string $method,
+        string $path,
+        ?array $jsonBody = null,
+        string $bodyFormat = 'json',
+    ): array
     {
         $url = $this->requireBaseUrl() . '/' . ltrim($path, '/');
+        $headers = $this->buildPartnerAuthHeaders();
+        if ($bodyFormat === 'multipart') {
+            unset($headers['Content-Type']);
+        }
         $response = $this->http->request(
             $method,
             $url,
-            $this->buildPartnerAuthHeaders(),
+            $headers,
             $jsonBody,
             $this->config->timeoutSeconds,
             $this->config->sslVerifyOption(),
+            $bodyFormat,
         );
         $result = $this->handleJsonResponse($response, asCallback: false);
 
         return is_array($result) ? $result : $result->raw;
+    }
+
+    /**
+     * @param string|\SplFileInfo $file
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    private function uploadDocument(
+        string $reference,
+        string|\SplFileInfo $file,
+        array $metadata,
+        string $message,
+    ): array {
+        $path = $file instanceof \SplFileInfo ? $file->getPathname() : $file;
+        if (!is_file($path)) {
+            throw new EServiceException('Le document à envoyer est introuvable : ' . $path);
+        }
+        if (!is_readable($path)) {
+            throw new EServiceException('Le document à envoyer est illisible : ' . $path);
+        }
+        $size = filesize($path);
+        if ($size === false || $size > 15 * 1024 * 1024) {
+            throw new EServiceException('Le document dépasse la taille maximale autorisée de 15 Mo.');
+        }
+
+        $filename = isset($metadata['filename']) && trim((string) $metadata['filename']) !== ''
+            ? basename((string) $metadata['filename'])
+            : basename($path);
+        $mime = function_exists('mime_content_type') ? mime_content_type($path) : false;
+        $contentType = is_string($mime) && $mime !== ''
+            ? $mime
+            : 'application/octet-stream';
+
+        unset($metadata['filename'], $metadata['contentType']);
+        $payload = [
+            'reference' => $reference,
+            'file' => new \CURLFile($path, $contentType, $filename),
+        ];
+        if ($message !== '') {
+            $payload['message'] = $message;
+        }
+        if ($metadata !== []) {
+            $encodedMetadata = json_encode(
+                $metadata,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            );
+            if ($encodedMetadata === false) {
+                throw new EServiceException('Impossible d\'encoder les métadonnées du document.');
+            }
+            $payload['data'] = $encodedMetadata;
+        }
+
+        return $this->partnerRequest(
+            'POST',
+            '/partner/runs/by-reference/document/',
+            $payload,
+            'multipart',
+        );
     }
 
     private function resolveRunIdFromReference(string $reference): string
